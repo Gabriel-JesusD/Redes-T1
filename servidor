@@ -94,7 +94,27 @@ def executa_comando(conexao, comando):
             if(conexao in apelidos.keys()): # Caso o nome seja disponivel e já sou usuário
                 del conexoes[apelidos[conexao].lower()] 
                 response = b':%s NICK %s\r\n' % (apelidos[conexao], nickname)
-            
+                pessoas_avisadas = defaultdict(lambda : False)
+                try:
+                    for canal in participantes[apelidos[conexao]]: # Visita todos os canais da pessoa
+                        # Remove a pessoa dos canais 
+                        canais[canal].remove(apelidos[conexao])
+                        for pessoa in canais[canal]: # Avisando as pessoas que a conexao saiu
+                            if not pessoas_avisadas[pessoa.lower()]:
+                                conexoes[pessoa.lower()].enviar(response)
+                                pessoas_avisadas[pessoa.lower()] = True
+                        # Colocar o apelido novo nos canais
+                        canais[canal].append(nickname)
+                    # Troca a key de seu apelido em participantes
+                    participantes[nickname] = participantes[apelidos[conexao]] 
+                    del participantes[apelidos[conexao]]
+                except:
+                    pass
+                apelidos[conexao] = nickname # Dicionario para acessar nome da conexao
+                conexoes[nickname.lower()] = conexao # Dicionario para acessar conexao dado um nome ignorando Mai/min letras
+                conexoes[nickname.lower()].enviar(response)
+                return
+                        
             else: # Caso o nome seja disponivel e sou novo
                 response = b':server 001 %s :Welcome\r\n:server 422 %s :MOTD File is missing\r\n' % (nickname, nickname) 
             apelidos[conexao] = nickname # Dicionario para acessar nome da conexao
@@ -174,7 +194,6 @@ def executa_comando(conexao, comando):
         
         canais[canal].remove(apelidos[conexao]) # Remove o usuario do canal
         return
-    print(apelidos)
     conexao.enviar(response)
 
 

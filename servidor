@@ -1,23 +1,127 @@
 #!/usr/bin/env python3
 import asyncio
+from urllib import response
 from tcp import Servidor
 import re
 
+apelidos = {}
+conexoes = {}
+canais = {}
+participantes = {}
 
 def validar_nome(nome):
     return re.match(br'^[a-zA-Z][a-zA-Z0-9_-]*$', nome) is not None
+
+def validar_canal(n):
+    nome = n.decode("utf-8")
+    return nome.startswith('#') and validar_nome(str.encode(nome[1:]))
 
 
 def sair(conexao):
     print(conexao, 'conexão fechada')
     conexao.fechar()
 
+buffer = ""
+
+def processa_dados(conexao, s):
+    global buffer
+    for i in s:
+        buffer += i
+        if(buffer.endswith('\n')):
+            executa_comando(conexao, buffer)
+            buffer = ""
+
 
 def dados_recebidos(conexao, dados):
+    recebido = dados.decode("utf-8")
     if dados == b'':
         return sair(conexao)
+    processa_dados(conexao,recebido)
+
     print(conexao, dados)
 
+def executa_comando(conexao, comando):
+    response = ""
+    if comando.startswith('PING '):
+        payload =  str.encode(comando.split(' ')[1])
+        response = b':server PONG server :%s' % payload 
+    elif comando.startswith('NICK '):
+        payload =  str.encode(comando.split(' ')[1])
+        payload = payload[0:len(payload)-2]
+        valido = validar_nome(payload)
+        nick_atual = b'*'
+        if(conexao in apelidos.keys()):
+            nick_atual = apelidos[conexao]
+        if not valido:
+            response = b':server 432 %s %s :Erroneous nickname\r\n' % (nick_atual, payload)
+        elif nome_usado(payload):
+            response = b':server 433 %s %s :Nickname is already in use\r\n' % (nick_atual, payload)
+        else:
+            if(conexao in apelidos.keys()):
+                del conexoes[apelidos[conexao].decode("utf-8").lower()]
+                response = b':%s NICK %s\r\n' % (apelidos[conexao], payload)
+            else:
+                response = b':server 001 %s :Welcome\r\n:server 422 %s :MOTD File is missing\r\n' % (payload, payload) 
+            apelidos[conexao] = payload
+            conexoes[payload.decode("utf-8").lower()] = conexao
+    elif comando.startswith('PRIVMSG '):
+        remetente = apelidos[conexao]
+        destinatario = str.encode(comando.split(' ')[1])
+        conteudo = str.encode(comando.split(' ')[2])
+
+        #####PESSOA######
+        if not comando.split(' ')[1].startswith('#'):
+            if destinatario.decode("utf-8").lower() not in conexoes.keys():
+                return
+            response = b':%s PRIVMSG %s %s' % (remetente, destinatario, conteudo)
+            conexoes[destinatario.decode("utf-8").lower()].enviar(response)
+            return
+        ######CANAL#####
+        pertence = False
+        for pessoas in canais[destinatario]:
+            if remetente.decode("utf-8").lower() == pessoas.decode("utf-8").lower():
+                pertence = True
+        
+        if not pertence:
+            return
+        print(canais[destinatario], destinatario)
+        for pessoas in canais[destinatario]:
+            response = b':%s PRIVMSG %s %s' % (remetente, destinatario, conteudo)
+            if(pessoas.decode("utf-8").lower() != remetente.decode("utf-8").lower()):
+                conexoes[pessoas.decode("utf-8").lower()].enviar(response)
+        #Verificar se a pessoa está no canal
+        #Percorrer as pessoas do canal mandndo mensagem
+
+
+
+
+    elif comando.startswith('JOIN '):
+        canal = str.encode(comando.split(' ')[1])
+        canal = canal[0:len(canal)-2]
+        if not validar_canal(canal):
+            response = b':server 403 %s :No such channel\r\n' % canal
+            print("a porta ", response)
+        else:   
+            print("oto caindo no elsi")
+            if not canal in canais.keys(): 
+                canais[canal] = []
+            canais[canal].append(apelidos[conexao])
+            if not apelidos[conexao] in participantes.keys(): 
+                participantes[apelidos[conexao]] = []
+            participantes[apelidos[conexao]].append(canal)
+            response = b':%s JOIN :%s\r\n' % (apelidos[conexao], canal)
+            # print(len(canais[canal]))
+            for membro in canais[canal]:
+                conexoes[membro.decode("utf-8").lower()].enviar(response)
+            return
+    conexao.enviar(response)
+
+def nome_usado(name):
+    decoded = name.decode("utf-8").lower()
+    for apelido in apelidos.values():
+        if decoded == apelido.decode("utf-8").lower():
+            return True
+    return False
 
 def conexao_aceita(conexao):
     print(conexao, 'nova conexão')

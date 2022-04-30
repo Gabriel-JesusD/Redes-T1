@@ -146,6 +146,7 @@ Você pode implementar essa funcionalidade na função `sair` do código de exem
 
 Passe a enviar a lista dos membros de um canal (mensagens 353 e 366) quando alguém entrar no canal (`JOIN`).
 
+
 ## Passo 10
 
 Certifique-se que, quando um usuário fecha a conexão, você está retirando o nome dele da lista de membros dos canais dos quais ele fazia parte.
